@@ -3,7 +3,7 @@
   "description": "Neo4j OGM for Node.js",
   "main": "./lib",
   "homepage": "https://github.com/bigluck/neoogm",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "license": "MIT",
   "licenses": [
     {

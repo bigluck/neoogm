@@ -3,17 +3,6 @@ async = require "async"
 _ = require "lodash"
 Q = require "q"
 
-#
-# Helpers
-parseCypherId = (path) ->
-	parseInt (path.match /([\d]+)$/)[1]
-parseInputId = (data) ->
-	if data?._id? then parseInt data._id else data
-ensureValidModel = (model, options) ->
-	keys = _.union (key for key of options.schema), (key for key, value of model when model.hasOwnProperty key)
-
-	_.transform keys, (out, key) ->
-		out[key] = model[key] if model[key]? and key isnt "_id" and (options.strict is false or (options.strict is true and options.schema?[key]))
 
 #
 # Globals
@@ -41,6 +30,7 @@ NeoormError = class extends Error
 		@name = "Neoorm#{ if data?.exception? then data?.exception else '' }"
 		@message = if data?.message? then data.message else data
 		@original = data
+
 
 #
 # Public
@@ -136,7 +126,7 @@ neoogm.cypher = (options, cb) ->
 					delete rows[rule.item]
 
 			# Only one item
-			if output_columns.length > 1 then rows else rows[output_columns[0]]
+			if output_columns.length and output_columns.length > 1 then rows else rows[output_columns[0]]
 
 		data = if options.one then data[0] else data
 
@@ -182,6 +172,7 @@ neoogm.node = (node_label, node_options=false) ->
 		constructor: (data={}) ->
 			@[name] = value for name, value of data
 		save: (cb) ->
+			deferred = Q.defer()
 			data = _.extend {}, @toJSON()
 			data[node_options.updated_at] = Date.now() if node_options.updated_at
 			data[node_options.created_at] = Date.now() if node_options.created_at and not @_id?
@@ -196,12 +187,21 @@ neoogm.node = (node_label, node_options=false) ->
 				params:
 					id: @_id
 					data: data
+				models: [ node_label ]
 			, (err, item) ->
-				return cb? err if err
+				if err
+					cb? err
+					return deferred.reject err
 				self[key] = value for key, value of item
 				cb? null, self
+				deferred.resolve self
+			deferred.promise
 		remove: (cb) ->
-			return cb new NeoormError "Node could not be deleted without a valid id" unless @_id
+			deferred = Q.defer()
+			unless @_id
+				err = new NeoormError "Node could not be deleted without a valid id"
+				cb? err
+				return deferred.reject err
 
 			self = @
 			neoogm.cypher
@@ -213,9 +213,13 @@ neoogm.node = (node_label, node_options=false) ->
 				params:
 					id: @_id
 			, (err, item) ->
-				return cb? err if err
+				if err
+					cb? err
+					return deferred.reject err
 				delete self._id
 				cb? null, self
+				deferred.resolve self
+			deferred.promise
 		# createOutgoing: (type, data, cb) ->
 		# createIncoming: (type, data, cb) ->
 		findOutgoing: (options, cb) ->
@@ -238,6 +242,8 @@ neoogm.node = (node_label, node_options=false) ->
 
 		@create: (data, cb) ->
 			[data, cb] = [{}, data] if typeof data is "function"
+			deferred = Q.defer()
+
 			neoogm.cypher
 				query: [
 					"CREATE (n:#{ node_label } {data})"
@@ -246,10 +252,15 @@ neoogm.node = (node_label, node_options=false) ->
 				params:
 					data: data
 				models: [ node_label ]
-			, ->
-				cb? arguments...
+			, (err, items) ->
+				if err
+					cb? err
+					return deferred.reject err
+				cb? err, items
+				deferred.resolve items
+			deferred.promise
 		@update: (options, cb) ->
-			return cb? new Error "No options found" if typeof options is "function"
+			deferred = Q.defer()
 			options = _.extend
 				query: null
 				params: {}
@@ -271,10 +282,15 @@ neoogm.node = (node_label, node_options=false) ->
 				]
 				params: options.params
 				models: [ node_label ]
-			, ->
-				cb? arguments...
+			, (err, items) ->
+				if err
+					cb? err
+					return deferred.reject err
+				cb? err, items
+				deferred.resolve items
+			deferred.promise
 		@delete: (options, cb) ->
-			return cb? new Error "No options found" if typeof options is "function"
+			deferred = Q.defer()
 
 			self = @
 			async.waterfall [
@@ -286,12 +302,21 @@ neoogm.node = (node_label, node_options=false) ->
 
 					neoogm.cypher "START n=node(*) WHERE n:User AND (#{ query_where }) DELETE n", (err) ->
 						cb err, items
-			], ->
-				cb? arguments...
+			], (err, items) ->
+				if err
+					cb? err
+					return deferred.reject err
+				cb? err, items
+				deferred.resolve items
+			deferred.promise
 
 		@findById: (id, cb) ->
 			[id, cb] = [null, id] if typeof id is "function"
-			return cb new NeoormError "Node id not defined" unless id?
+			deferred = Q.defer()
+			unless id?
+				err = new NeoormError "Node id not defined"
+				cb? err
+				return deferred.reject err
 
 			neoogm.cypher
 				query: [
@@ -303,11 +328,20 @@ neoogm.node = (node_label, node_options=false) ->
 					id: id
 				models: [ node_label ]
 				one: true
-			, ->
-				cb? arguments...
+			, (err, items) ->
+				if err
+					cb? err
+					return deferred.reject err
+				cb? err, items
+				deferred.resolve items
+			deferred.promise
 		@findByIdAndRemove: (id, cb) ->
 			[id, cb] = [null, id] if typeof id is "function"
-			return cb new NeoormError "Node id not defined" unless id?
+			deferred = Q.defer()
+			unless id?
+				err = new NeoormError "Node id not defined"
+				cb? err
+				return deferred.reject err
 
 			self = @
 			async.waterfall [
@@ -315,10 +349,16 @@ neoogm.node = (node_label, node_options=false) ->
 					self.findById id, cb
 				(item, cb) ->
 					item.remove cb
-			], ->
-				cb? arguments...
+			], (err, items) ->
+				if err
+					cb? err
+					return deferred.reject err
+				cb? err, items
+				deferred.resolve items
+			deferred.promise
 		@findByIdAndUpdate: (id, data, cb) ->
 			[data, cb] = [{}, id] if typeof data is "function"
+			deferred = Q.defer()
 			data = _.extend {}, data
 			data[node_options.updated_at] = Date.now() if node_options.updated_at
 			query_update = (" n.#{key} = {#{key}} " for key, value of data).join ", "
@@ -334,10 +374,16 @@ neoogm.node = (node_label, node_options=false) ->
 					id: id
 				models: [ node_label ]
 				one: true
-			, ->
-				cb? arguments...
+			, (err, items) ->
+				if err
+					cb? err
+					return deferred.reject err
+				cb? err, items
+				deferred.resolve items
+			deferred.promise
 		@find: (options, cb) ->
 			[options, cb] = [{}, options] if typeof options is "function"
+			deferred = Q.defer()
 			options = _.extend
 				query: null
 				params: {}
@@ -356,8 +402,13 @@ neoogm.node = (node_label, node_options=false) ->
 				]
 				params: options.params
 				models: [ node_label ]
-			, ->
-				cb? arguments...
+			, (err, items) ->
+				if err
+					cb? err
+					return deferred.reject err
+				cb? err, items
+				deferred.resolve items
+			deferred.promise
 
 neoogm.relationship = (relationship_type, relationship_options=false) ->
 	relationship_type = relationship_type.trim()
@@ -374,11 +425,18 @@ neoogm.relationship = (relationship_type, relationship_options=false) ->
 		constructor: (data={}) ->
 			@[name] = value for name, value of data
 		save: (cb) ->
+			deferred = Q.defer()
 			data = _.extend {}, @toJSON()
 			data[relationship_options.updated_at] = Date.now() if relationship_options.updated_at
 			data[relationship_options.created_at] = Date.now() if relationship_options.created_at and not @_id?
-			return cb? new NeoormError "Start node not defined" unless @_start?
-			return cb? new NeoormError "End node not defined" unless @_end?
+			unless @_start?
+				err = new NeoormError "Start node not defined"
+				cb? err
+				return deferred.reject err
+			unless @_end?
+				err = new NeoormError "End node not defined"
+				cb? err
+				return deferred.reject err
 
 			self = @
 			async.waterfall [
@@ -437,11 +495,19 @@ neoogm.relationship = (relationship_type, relationship_options=false) ->
 					, ->
 						cb? arguments...
 			], (err, item) ->
-				return cb? err if err
+				if err
+					cb? err
+					return deferred.reject err
 				self[key] = value for key, value of item
 				cb? null, self
+				deferred.resolve self
+			deferred.promise
 		remove: (cb) ->
-			return cb new NeoormError "Relationship could not be deleted without a valid id" unless @_id
+			deferred = Q.defer()
+			unless @_id
+				err = new NeoormError "Relationship could not be deleted without a valid id"
+				cb? err
+				return deferred.reject err
 
 			self = @
 			neoogm.cypher
@@ -454,35 +520,49 @@ neoogm.relationship = (relationship_type, relationship_options=false) ->
 					id: @_id
 					type: relationship_type
 			, (err, item) ->
-				return cb? err if err
+				if err
+					cb? err
+					return deferred.reject err
 				delete self._id
 				delete self._start
 				delete self._end
 				cb? null, self
+				deferred.resolve results
+			deferred.promise
 		getId: ->
 			@_id
 		getType: ->
 			relationship_type
 		getStart: (cb) ->
+			deferred = Q.defer()
 			self = @
 			async.waterfall [
 				(cb) ->
 					return cb null, self._start if self._start?._id?
 					neoogm.findNodeById self._start, cb
 			], (err, item) ->
-				return cb? err if err
+				if err
+					cb? err
+					return deferred.reject err
 				self._start = item
 				cb? null, item
+				deferred.resolve item
+			deferred.promise
 		getEnd: (cb) ->
+			deferred = Q.defer()
 			self = @
 			async.waterfall [
 				(cb) ->
 					return cb null, self._end if self._end?._id?
 					neoogm.findNodeById self._end, cb
 			], (err, item) ->
-				return cb? err if err
+				if err
+					cb? err
+					return deferred.reject err
 				self._end = item
 				cb? null, item
+				deferred.resolve item
+			deferred.promise
 		toJSON: ->
 			ensureValidModel @, relationship_options
 
@@ -494,6 +574,7 @@ neoogm.relationship = (relationship_type, relationship_options=false) ->
 			@findRelates (_.extend {}, options, incoming: true), cb
 		@findRelates: (options, cb) ->
 			[options, cb] = [{}, options] if typeof options is "function"
+			deferred = Q.defer()
 			options = _.extend
 				model: null
 				outgoing: false
@@ -501,8 +582,14 @@ neoogm.relationship = (relationship_type, relationship_options=false) ->
 				query: null
 				params: {}
 			, options
-			return cb? new NeoormError "options.model have to be an Neoorm model" unless model_label = options.model?.getLabel?()
-			return cb? new NeoormError "options.model is not an database reference" unless options.model?.getId?()?
+			unless model_label = options.model?.getLabel?()
+				err = new NeoormError "options.model have to be an Neoorm model" 
+				cb? err
+				return deferred.reject err
+			unless options.model?.getId?()?
+				err = new NeoormError "options.model is not an database reference"
+				cb? err
+				return deferred.reject err
 			if options.query instanceof Array
 				options.query = options.query.join " "
 			else if typeof options.query is "object"
@@ -523,12 +610,31 @@ neoogm.relationship = (relationship_type, relationship_options=false) ->
 					id: options.model.getId()
 				models: [ relationship_type, "=end_labels", false ]
 			, (err, results) ->
-				return cb err if err
-				cb err, _.map results, (row, row_i) ->
+				if err
+					cb? err 
+					return deferred.reject err
+				results = _.map results, (row, row_i) ->
 					row.start = options.model
 					row
+				cb? err, results
+				deferred.resolve results
+			deferred.promise
 		# @create: () ->
 		# @update: () ->
 		# @delete: () ->
+
+
+#
+# Helpers
+parseCypherId = (path) ->
+	parseInt (path.match /([\d]+)$/)[1]
+parseInputId = (data) ->
+	if data?._id? then parseInt data._id else data
+ensureValidModel = (model, options) ->
+	keys = _.union (key for key of options.schema), (key for key, value of model when model.hasOwnProperty key)
+
+	_.transform keys, (out, key) ->
+		out[key] = model[key] if model[key]? and key isnt "_id" and (options.strict is false or (options.strict is true and options.schema?[key]))
+
 
 module.exports = neoogm
