@@ -1,0 +1,42 @@
+{
+  "name": "neoogm",
+  "description": "Neo4j OGM for Node.js",
+  "main": "./lib",
+  "homepage": "https://github.com/bigluck/neoogm",
+  "version": "0.0.1",
+  "license": "MIT",
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "https://github.com/bigluck/neoogm/raw/master/LICENSE"
+    }
+  ],
+  "scripts": {
+    "build": "grunt dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bigluck/neoogm"
+  },
+  "keywords": [
+    "OGM",
+    "Neo4J"
+  ],
+  "author": "Luca Bigon",
+  "bugs": {
+    "url": "https://github.com/bigluck/neoogm/issues"
+  },
+  "devDependencies": {
+    "grunt": "^0.4.4",
+    "coffee-script": "^1.7.1",
+    "nodemon": "^1.0.15",
+    "grunt-contrib-coffee": "^0.10.1",
+    "grunt-banner": "^0.2.2"
+  },
+  "dependencies": {
+    "async": "^0.6.2",
+    "q": "^1.0.1",
+    "lodash": "^2.4.1",
+    "request": "^2.34.0"
+  }
+}
