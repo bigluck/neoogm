@@ -769,14 +769,19 @@ function (err, item) {};
 
 # Cypher query
 
-## neoogm.cypher(options = {})
+## neoogm.cypher(options = {}, callback)
 
 Send a cypher query to the remote database
 
 **Examples:**
 
 ```javascript
-neoogm.query("START n = node(2) RETURN n");
+neoogm.query("START n = node(2) RETURN n", function(err, items)
+{
+	if (err)
+		return console.error(err);
+	console.log('Items: ', items.length, items);
+});
 ```
 
 **Options Hash (options):**
@@ -788,3 +793,9 @@ neoogm.query("START n = node(2) RETURN n");
 	* ***Object*** — when you want alter all the models with a ``=`` match rule, you can pass an hash of key (field name) and values)
 * **params** (Object) — list of keys (param name) and values to replace in a query string.
 * **model** (Array) — list of model names to wrap RETURN values
+
+**Callback (callback):**
+
+```javascript
+function (err, items) {};
+``` 
