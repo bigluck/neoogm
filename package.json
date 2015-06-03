@@ -36,7 +36,7 @@
   "dependencies": {
     "async": "0.6.x",
     "q": "1.0.x",
-    "lodash": "x2.4.x",
+    "lodash": "2.4.x",
     "request": "2.34.x"
   }
 }
